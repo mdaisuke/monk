@@ -82,3 +82,89 @@ func checkParserErrors(t *testing.T, p *Parser) {
 	}
 	t.FailNow()
 }
+
+func TestReturnStmts(t *testing.T) {
+	input := `
+	return 5;
+	return 10;
+	return 993322;
+	`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	if len(program.Stmts) != 3 {
+		t.Fatalf("len(program.Stmts) is not 3. got=%d",
+			len(program.Stmts))
+	}
+
+	for _, stmt := range program.Stmts {
+		returnStmt, ok := stmt.(*ast.ReturnStmt)
+		if !ok {
+			t.Errorf("stmt is not ast.ReturnStmt. got=%T",
+				stmt)
+			continue
+		}
+		if returnStmt.TokenLiteral() != "return" {
+			t.Errorf("returnStmt.TokenLiteral is not 'return'. got=%q",
+				returnStmt.TokenLiteral())
+		}
+	}
+}
+
+func TestIdentifierExp(t *testing.T) {
+	input := "foobar;"
+
+	l := lexer.New(input)
+	parsed := New(l)
+	p := parsed.ParseProgram()
+	checkParserErrors(t, parsed)
+
+	if len(p.Stmts) != 1 {
+		t.Fatalf("len(p.Stmts) is not 1. got=%d",
+			len(p.Stmts))
+	}
+
+	stmt, ok := p.Stmts[0].(*ast.ExpStmt)
+	if !ok {
+		t.Fatalf("p.Stmts[0] is not ast.ExpStmt. got=%T",
+			p.Stmts[0])
+	}
+
+	ident, ok := stmt.Exp.(*ast.Identifier)
+	if !ok {
+		t.Fatalf("exp is not ast.Identifier. got=%T", stmt.Exp)
+	}
+	if ident.Value != "foobar" {
+		t.Errorf("ident.Value is not foobar. got=%s", ident.Value)
+	}
+	if ident.TokenLiteral() != "foobar" {
+		t.Errorf("ident.TokenLiteral is not foobar. got=%s", ident.TokenLiteral())
+	}
+}
+
+func TestIntegerLiteralExp(t *testing.T) {
+	input := "5;"
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	if len(program.Stmts) != 1 {
+		t.Fatalf("len(program.Stmts) is not 1. got=%d",
+			len(program.Stmts))
+	}
+	stmt, ok := program.Stmts[0].(*ast.ExpStmt)
+	if !ok {
+		t.Fatalf("program.Stmts[0] is not ast.ExpStmt. got=%T",
+			program.Stmts[0])
+	}
+
+	literal, ok := stmt.Exp.(*ast.IntegerLiteral)
+	if !ok {
+		t.Fatalf("")
+	}
+}

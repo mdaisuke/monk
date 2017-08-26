@@ -8,13 +8,31 @@ import (
 	"github.com/mdaisuke/monk/token"
 )
 
-type Parser struct {
-	l *lexer.Lexer
+const (
+	_ int = iota
+	LOWEST
+	EQUALS
+	LESSGREATER
+	SUM
+	PRODUCT
+	PREFIX
+	CALL
+)
 
+type (
+	nud func() ast.Exp
+	led func(ast.Exp) ast.Exp
+)
+
+type Parser struct {
+	l      *lexer.Lexer
 	errors []string
 
 	curToken  token.Token
 	peekToken token.Token
+
+	nuds map[token.TokenType]nud
+	leds map[token.TokenType]led
 }
 
 func (p *Parser) Errors() []string {
@@ -29,6 +47,9 @@ func (p *Parser) peekError(t token.TokenType) {
 
 func New(l *lexer.Lexer) *Parser {
 	p := &Parser{l: l}
+
+	p.nuds = make(map[token.TokenType]nud)
+	p.registerNud(token.IDENT, p.parseIdentifier)
 
 	p.nextToken()
 	p.nextToken()
@@ -60,8 +81,10 @@ func (p *Parser) parseStmt() ast.Stmt {
 	switch p.curToken.Type {
 	case token.LET:
 		return p.parseLetStmt()
+	case token.RETURN:
+		return p.parseReturnStmt()
 	default:
-		return nil
+		return p.parseExpStmt()
 	}
 }
 
@@ -98,6 +121,53 @@ func (p *Parser) expectPeek(t token.TokenType) bool {
 		p.nextToken()
 		return true
 	} else {
+		p.peekError(t)
 		return false
 	}
+}
+
+func (p *Parser) parseReturnStmt() *ast.ReturnStmt {
+	stmt := &ast.ReturnStmt{Token: p.curToken}
+
+	p.nextToken()
+
+	for !p.curTokenIs(token.SEMICOLON) {
+		p.nextToken()
+	}
+
+	return stmt
+}
+
+func (p *Parser) registerNud(tokenType token.TokenType, fn nud) {
+	p.nuds[tokenType] = fn
+}
+
+func (p *Parser) registerLed(tokenType token.TokenType, fn led) {
+	p.leds[tokenType] = fn
+}
+
+func (p *Parser) parseExpStmt() *ast.ExpStmt {
+	stmt := &ast.ExpStmt{Token: p.curToken}
+
+	stmt.Exp = p.parseExp(LOWEST)
+
+	if p.peekTokenIs(token.SEMICOLON) {
+		p.nextToken()
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseExp(precedence int) ast.Exp {
+	prefix := p.nuds[p.curToken.Type]
+	if prefix == nil {
+		return nil
+	}
+	leftExp := prefix()
+
+	return leftExp
+}
+
+func (p *Parser) parseIdentifier() ast.Exp {
+	return &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
 }
