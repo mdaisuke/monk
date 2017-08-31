@@ -158,3 +158,54 @@ func (ie *InfixExp) String() string {
 
 	return out.String()
 }
+
+type Boolean struct {
+	Token token.Token
+	Value bool
+}
+
+func (b *Boolean) expNode()             {}
+func (b *Boolean) TokenLiteral() string { return b.Token.Literal }
+func (b *Boolean) String() string       { return b.Token.Literal }
+
+type IfExp struct {
+	Token  token.Token
+	Cond   Exp
+	Conseq *BlockStmt
+	Alt    *BlockStmt
+}
+
+func (ie *IfExp) expNode()             {}
+func (ie *IfExp) TokenLiteral() string { return ie.Token.Literal }
+func (ie *IfExp) String() string {
+	var out bytes.Buffer
+
+	out.WriteString("if")
+	out.WriteString(ie.Cond.String())
+	out.WriteString(" ")
+	out.WriteString(ie.Conseq.String())
+
+	if ie.Alt != nil {
+		out.WriteString("else ")
+		out.WriteString(ie.Alt.String())
+	}
+
+	return out.String()
+}
+
+type BlockStmt struct {
+	Token token.Token
+	Stmts []Stmt
+}
+
+func (bs *BlockStmt) stmtNode()            {}
+func (bs *BlockStmt) TokenLiteral() string { return bs.Token.Literal }
+func (bs *BlockStmt) String() string {
+	var out bytes.Buffer
+
+	for _, s := range bs.Stmts {
+		out.WriteString(s.String())
+	}
+
+	return out.String()
+}

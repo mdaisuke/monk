@@ -32,7 +32,7 @@ var precedences = map[token.TokenType]int{
 }
 
 type (
-	nod func() ast.Exp
+	nud func() ast.Exp
 	led func(ast.Exp) ast.Exp
 )
 
@@ -43,7 +43,7 @@ type Parser struct {
 	curToken  token.Token
 	peekToken token.Token
 
-	nods map[token.TokenType]nod
+	nuds map[token.TokenType]nud
 	leds map[token.TokenType]led
 }
 
@@ -53,11 +53,14 @@ func New(l *lexer.Lexer) *Parser {
 		errors: []string{},
 	}
 
-	p.nods = make(map[token.TokenType]nod)
-	p.registerNod(token.IDENT, p.parseIdentifier)
-	p.registerNod(token.INT, p.parseIntegerLiteral)
-	p.registerNod(token.BANG, p.parsePrefixExp)
-	p.registerNod(token.MINUS, p.parsePrefixExp)
+	p.nuds = make(map[token.TokenType]nud)
+	p.registerNud(token.IDENT, p.parseIdentifier)
+	p.registerNud(token.INT, p.parseIntegerLiteral)
+	p.registerNud(token.BANG, p.parsePrefixExp)
+	p.registerNud(token.MINUS, p.parsePrefixExp)
+	p.registerNud(token.TRUE, p.parseBoolean)
+	p.registerNud(token.FALSE, p.parseBoolean)
+	p.registerNud(token.LPAREN, p.parseGroupedExp)
 	p.leds = make(map[token.TokenType]led)
 	p.registerLed(token.PLUS, p.parseInfixExp)
 	p.registerLed(token.MINUS, p.parseInfixExp)
@@ -165,8 +168,8 @@ func (p *Parser) parseReturnStmt() *ast.ReturnStmt {
 	return stmt
 }
 
-func (p *Parser) registerNod(tokenType token.TokenType, fn nod) {
-	p.nods[tokenType] = fn
+func (p *Parser) registerNud(tokenType token.TokenType, fn nud) {
+	p.nuds[tokenType] = fn
 }
 
 func (p *Parser) registerLed(tokenType token.TokenType, fn led) {
@@ -186,9 +189,9 @@ func (p *Parser) parseExpStmt() *ast.ExpStmt {
 }
 
 func (p *Parser) parseExp(precedence int) ast.Exp {
-	prefix := p.nods[p.curToken.Type]
+	prefix := p.nuds[p.curToken.Type]
 	if prefix == nil {
-		p.noNodError(p.curToken.Type)
+		p.noNud(p.curToken.Type)
 		return nil
 	}
 	leftExp := prefix()
@@ -226,7 +229,7 @@ func (p *Parser) parseIntegerLiteral() ast.Exp {
 	return lit
 }
 
-func (p *Parser) noNodError(t token.TokenType) {
+func (p *Parser) noNud(t token.TokenType) {
 	msg := fmt.Sprintf("no prefix parse function for %s found", t)
 	p.errors = append(p.errors, msg)
 }
@@ -268,6 +271,22 @@ func (p *Parser) parseInfixExp(left ast.Exp) ast.Exp {
 	precedence := p.curPrecedence()
 	p.nextToken()
 	exp.Right = p.parseExp(precedence)
+
+	return exp
+}
+
+func (p *Parser) parseBoolean() ast.Exp {
+	return &ast.Boolean{Token: p.curToken, Value: p.curTokenIs(token.TRUE)}
+}
+
+func (p *Parser) parseGroupedExp() ast.Exp {
+	p.nextToken()
+
+	exp := p.parseExp(LOWEST)
+
+	if !p.expectPeek(token.RPAREN) {
+		return nil
+	}
 
 	return exp
 }

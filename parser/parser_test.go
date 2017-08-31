@@ -185,10 +185,12 @@ func TestParsingPrefixExps(t *testing.T) {
 	tests := []struct {
 		input        string
 		op           string
-		integerValue int64
+		integerValue interface{}
 	}{
 		{"!5;", "!", 5},
 		{"-15;", "-", 15},
+		{"!true", "!", true},
+		{"!false", "!", false},
 	}
 
 	for _, tt := range tests {
@@ -216,7 +218,7 @@ func TestParsingPrefixExps(t *testing.T) {
 			t.Fatalf("exp.Op is not '%s'. got=%s",
 				tt.op, exp.Op)
 		}
-		if !testIntegerLiteral(t, exp.Right, tt.integerValue) {
+		if !testLiteralExp(t, exp.Right, tt.integerValue) {
 			return
 		}
 	}
@@ -246,9 +248,9 @@ func testIntegerLiteral(t *testing.T, il ast.Exp, value int64) bool {
 func TestParsingInfixExps(t *testing.T) {
 	tests := []struct {
 		input      string
-		leftValue  int64
+		leftValue  interface{}
 		op         string
-		rightValue int64
+		rightValue interface{}
 	}{
 		{"5 + 5;", 5, "+", 5},
 		{"5 - 5;", 5, "-", 5},
@@ -258,6 +260,9 @@ func TestParsingInfixExps(t *testing.T) {
 		{"5 < 5;", 5, "<", 5},
 		{"5 == 5;", 5, "==", 5},
 		{"5 != 5;", 5, "!=", 5},
+		{"true == true", true, "==", true},
+		{"true != false", true, "!=", false},
+		{"false == false", false, "==", false},
 	}
 
 	for _, tt := range tests {
@@ -282,15 +287,14 @@ func TestParsingInfixExps(t *testing.T) {
 			t.Fatalf("stmt.Exp is not ast.InfixExp. got=%T", stmt.Exp)
 		}
 
-		if !testIntegerLiteral(t, exp.Left, tt.leftValue) {
-			return
-		}
-
 		if exp.Op != tt.op {
 			t.Fatalf("exp.Op is not '%s'. got=%s", tt.op, exp.Op)
 		}
 
-		if !testIntegerLiteral(t, exp.Right, tt.rightValue) {
+		if !testLiteralExp(t, exp.Left, tt.leftValue) {
+			return
+		}
+		if !testLiteralExp(t, exp.Right, tt.rightValue) {
 			return
 		}
 	}
@@ -349,6 +353,42 @@ func TestOpPrecedenceParsing(t *testing.T) {
 			"3 + 4 * 5 == 3 * 1 + 4 * 5",
 			"((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))",
 		},
+		{
+			"true",
+			"true",
+		},
+		{
+			"false",
+			"false",
+		},
+		{
+			"3 > 5 == false",
+			"((3 > 5) == false)",
+		},
+		{
+			"3 < 5 == true",
+			"((3 < 5) == true)",
+		},
+		{
+			"1 + (2 + 3) + 4",
+			"((1 + (2 + 3)) + 4)",
+		},
+		{
+			"(5 + 5) * 2",
+			"((5 + 5) * 2)",
+		},
+		{
+			"2 / (5 + 5)",
+			"(2 / (5 + 5))",
+		},
+		{
+			"-(5 + 5)",
+			"(-(5 + 5))",
+		},
+		{
+			"!(true == true)",
+			"(!(true == true))",
+		},
 	}
 
 	for _, tt := range tests {
@@ -363,4 +403,135 @@ func TestOpPrecedenceParsing(t *testing.T) {
 				tt.expected, actual)
 		}
 	}
+}
+
+func testIdentifier(t *testing.T, exp ast.Exp, value string) bool {
+	ident, ok := exp.(*ast.Identifier)
+	if !ok {
+		t.Errorf("exp is not ast.Identifier. got=%T", exp)
+		return false
+	}
+
+	if ident.Value != value {
+		t.Errorf("ident.Value is not '%s'. got=%s", value, ident.Value)
+		return false
+	}
+
+	if ident.TokenLiteral() != value {
+		t.Errorf("ident.TokenLiteral() is not '%s'. got=%s", value, ident.TokenLiteral())
+		return false
+	}
+
+	return true
+}
+
+func testLiteralExp(
+	t *testing.T,
+	exp ast.Exp,
+	expected interface{},
+) bool {
+	switch v := expected.(type) {
+	case int:
+		return testIntegerLiteral(t, exp, int64(v))
+	case int64:
+		return testIntegerLiteral(t, exp, v)
+	case string:
+		return testIdentifier(t, exp, v)
+	case bool:
+		return testBooleanLiteral(t, exp, v)
+	}
+	t.Errorf("type of exp is not handled. got=%T", exp)
+	return false
+}
+
+func testBooleanLiteral(t *testing.T, exp ast.Exp, value bool) bool {
+	bo, ok := exp.(*ast.Boolean)
+	if !ok {
+		t.Errorf("exp is not ast.Boolean. got=%T", exp)
+		return false
+	}
+
+	if bo.Value != value {
+		t.Errorf("bo.Value is not %t. got=%t", value, bo.Value)
+		return false
+	}
+
+	if bo.TokenLiteral() != fmt.Sprintf("%t", value) {
+		t.Errorf("bo.TokenLiteral is not %t. got=%s",
+			value, bo.TokenLiteral())
+		return false
+	}
+
+	return true
+}
+
+func testInfixExp(
+	t *testing.T,
+	exp ast.Exp,
+	left interface{},
+	op string,
+	right interface{},
+) bool {
+	opExp, ok := exp.(*ast.InfixExp)
+	if !ok {
+		t.Errorf("exp is not ast.InfixExp. got=%T(%s)", exp, exp)
+		return false
+	}
+
+	if !testLiteralExp(t, opExp.Left, left) {
+		return false
+	}
+
+	if opExp.Op != op {
+		t.Errorf("exp.Op is not '%s'. got=%q", op, opExp.Op)
+		return false
+	}
+
+	if !testLiteralExp(t, opExp.Right, right) {
+		return false
+	}
+
+	return true
+}
+
+func TestBooleanExp(t *testing.T) {
+	input := "true;"
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	if len(program.Stmts) != 1 {
+		t.Fatalf("len(program.Stmts) is not 1. got=%d",
+			len(program.Stmts))
+	}
+	stmt, ok := program.Stmts[0].(*ast.ExpStmt)
+	if !ok {
+		t.Fatalf("program.Stmts[0] is not ast.ExpStmt. got=%T",
+			program.Stmts[0])
+	}
+
+	b, ok := stmt.Exp.(*ast.Boolean)
+	if !ok {
+		t.Fatalf("stmt.Exp is not ast.Boolean. got=%T",
+			stmt.Exp)
+	}
+	if b.Value != true {
+		t.Errorf("b.Value is not 'true'. got=%t",
+			b.Value)
+	}
+	if b.TokenLiteral() != "true" {
+		t.Errorf("b.TokenLiteral() is not 'true'. got=%s",
+			b.TokenLiteral())
+	}
+}
+
+func TestIfExp(t *testing.T) {
+	input := `if (x < y) { x }`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
 }
