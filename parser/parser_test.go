@@ -389,6 +389,18 @@ func TestOpPrecedenceParsing(t *testing.T) {
 			"!(true == true)",
 			"(!(true == true))",
 		},
+		{
+			"a + add(b * c) + d",
+			"((a + add((b * c))) + d)",
+		},
+		{
+			"add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))",
+			"add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))",
+		},
+		{
+			"add(a + b + c * d / f + g)",
+			"add((((a + b) + ((c * d) / f)) + g))",
+		},
 	}
 
 	for _, tt := range tests {
@@ -534,4 +546,220 @@ func TestIfExp(t *testing.T) {
 	p := New(l)
 	program := p.ParseProgram()
 	checkParserErrors(t, p)
+
+	if len(program.Stmts) != 1 {
+		t.Fatalf("len(program.Stmts) is not 1. got=%d",
+			len(program.Stmts))
+	}
+
+	stmt, ok := program.Stmts[0].(*ast.ExpStmt)
+	if !ok {
+		t.Fatalf("stmts[0] is not ast.ExpStmt. got=%T",
+			program.Stmts[0])
+	}
+
+	exp, ok := stmt.Exp.(*ast.IfExp)
+	if !ok {
+		t.Fatalf("stmt.Exp is not ast.IfExp. got=%T", stmt.Exp)
+	}
+
+	if !testInfixExp(t, exp.Cond, "x", "<", "y") {
+		return
+	}
+
+	if len(exp.Conseq.Stmts) != 1 {
+		t.Errorf("len(exp.Conseq.Stmts) is not 1. got=%d",
+			len(exp.Conseq.Stmts))
+	}
+
+	conseq, ok := exp.Conseq.Stmts[0].(*ast.ExpStmt)
+	if !ok {
+		t.Fatalf("stmts[0] is not ast.ExpStmt. got=%T",
+			exp.Conseq.Stmts[0])
+	}
+
+	if !testIdentifier(t, conseq.Exp, "x") {
+		return
+	}
+
+	if exp.Alt != nil {
+		t.Errorf("exp.Alt is not nil. got=%+v", exp.Alt)
+	}
+}
+
+func TestIfElseExp(t *testing.T) {
+	input := `if (x < y) { x } else { y }`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	if len(program.Stmts) != 1 {
+		t.Fatalf("len(program.Stmts) is not 1. got=%d",
+			len(program.Stmts))
+	}
+
+	stmt, ok := program.Stmts[0].(*ast.ExpStmt)
+	if !ok {
+		t.Fatalf("stmts[0] is not ast.ExpStmt. got=%T",
+			program.Stmts[0])
+	}
+
+	exp, ok := stmt.Exp.(*ast.IfExp)
+	if !ok {
+		t.Fatalf("stmt.Exp is not ast.IfExp. got=%T", stmt.Exp)
+	}
+
+	if !testInfixExp(t, exp.Cond, "x", "<", "y") {
+		return
+	}
+
+	if len(exp.Conseq.Stmts) != 1 {
+		t.Errorf("len(exp.Conseq.Stmts) is not 1. got=%d",
+			len(exp.Conseq.Stmts))
+	}
+
+	conseq, ok := exp.Conseq.Stmts[0].(*ast.ExpStmt)
+	if !ok {
+		t.Fatalf("stmts[0] is not ast.ExpStmt. got=%T",
+			exp.Conseq.Stmts[0])
+	}
+
+	if !testIdentifier(t, conseq.Exp, "x") {
+		return
+	}
+
+	if len(exp.Alt.Stmts) != 1 {
+		t.Errorf("len(exp.Alt.Stmts) is not 1. got=%d",
+			len(exp.Alt.Stmts))
+	}
+
+	alt, ok := exp.Alt.Stmts[0].(*ast.ExpStmt)
+	if !ok {
+		t.Fatalf("stmts[0] is not ast.ExpStmt. got=%T",
+			exp.Alt.Stmts[0])
+	}
+
+	if !testIdentifier(t, alt.Exp, "y") {
+		return
+	}
+}
+
+func TestFunctionLiteralParsing(t *testing.T) {
+	input := `fn(x, y) { x + y; }`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	if len(program.Stmts) != 1 {
+		t.Fatalf("len(program.Stmts) is not 1. got=%d",
+			len(program.Stmts))
+	}
+
+	stmt, ok := program.Stmts[0].(*ast.ExpStmt)
+	if !ok {
+		t.Fatalf("program.Stmts[0] is not ast.ExpStmt. got=%T",
+			program.Stmts[0])
+	}
+
+	function, ok := stmt.Exp.(*ast.FunctionLiteral)
+	if !ok {
+		t.Fatalf("stmt.Exp is not ast.FunctionLiteral. got=%T",
+			stmt.Exp)
+	}
+
+	if len(function.Params) != 2 {
+		t.Fatalf("len(function.Params) is not 2. got=%d",
+			len(function.Params))
+	}
+
+	testLiteralExp(t, function.Params[0], "x")
+	testLiteralExp(t, function.Params[1], "y")
+
+	if len(function.Body.Stmts) != 1 {
+		t.Fatalf("len(function.Body.Stmts) is not 1. got=%d",
+			len(function.Body.Stmts))
+	}
+
+	body, ok := function.Body.Stmts[0].(*ast.ExpStmt)
+	if !ok {
+		t.Fatalf("function body is not ast.ExpStmt. got=%T",
+			function.Body.Stmts[0])
+	}
+
+	testInfixExp(t, body.Exp, "x", "+", "y")
+}
+
+func TestFunctionParamsParsing(t *testing.T) {
+	tests := []struct {
+		input          string
+		expectedParams []string
+	}{
+		{"fn() {};", []string{}},
+		{"fn(x) {};", []string{"x"}},
+		{"fn(x, y, z) {};", []string{"x", "y", "z"}},
+	}
+
+	for _, tt := range tests {
+		l := lexer.New(tt.input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		stmt := program.Stmts[0].(*ast.ExpStmt)
+		function := stmt.Exp.(*ast.FunctionLiteral)
+
+		if len(function.Params) != len(tt.expectedParams) {
+			t.Errorf("len(function.Params) is not %d. got=%d",
+				len(tt.expectedParams), len(function.Params))
+		}
+
+		for i, ident := range tt.expectedParams {
+			testLiteralExp(t, function.Params[i], ident)
+		}
+	}
+
+}
+
+func TestCallExpParsing(t *testing.T) {
+	input := "add(1, 2 * 3, 4 + 5);"
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	if len(program.Stmts) != 1 {
+		t.Fatalf("len(program.Stmts) is not 1. got=%d",
+			len(program.Stmts))
+	}
+
+	stmt, ok := program.Stmts[0].(*ast.ExpStmt)
+	if !ok {
+		t.Fatalf("stmt is not ast.ExpStmt. got=%T",
+			program.Stmts[0])
+	}
+
+	exp, ok := stmt.Exp.(*ast.CallExp)
+	if !ok {
+		t.Fatalf("stmt.Exp is not ast.CallExp. got=%T",
+			stmt.Exp)
+	}
+
+	if !testIdentifier(t, exp.Function, "add") {
+		return
+	}
+
+	if len(exp.Args) != 3 {
+		t.Fatalf("len(exp.Args) is not 3. got=%d",
+			len(exp.Args))
+	}
+
+	testLiteralExp(t, exp.Args[0], 1)
+	testInfixExp(t, exp.Args[1], 2, "*", 3)
+	testInfixExp(t, exp.Args[2], 4, "+", 5)
+
 }

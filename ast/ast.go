@@ -2,6 +2,7 @@ package ast
 
 import (
 	"bytes"
+	"strings"
 
 	"github.com/mdaisuke/monk/token"
 )
@@ -206,6 +207,55 @@ func (bs *BlockStmt) String() string {
 	for _, s := range bs.Stmts {
 		out.WriteString(s.String())
 	}
+
+	return out.String()
+}
+
+type FunctionLiteral struct {
+	Token  token.Token
+	Params []*Identifier
+	Body   *BlockStmt
+}
+
+func (fl *FunctionLiteral) expNode()             {}
+func (fl *FunctionLiteral) TokenLiteral() string { return fl.Token.Literal }
+func (fl *FunctionLiteral) String() string {
+	var out bytes.Buffer
+
+	params := []string{}
+	for _, param := range fl.Params {
+		params = append(params, param.String())
+	}
+
+	out.WriteString(fl.TokenLiteral())
+	out.WriteString("(")
+	out.WriteString(strings.Join(params, ", "))
+	out.WriteString(")")
+	out.WriteString(fl.Body.String())
+
+	return out.String()
+}
+
+type CallExp struct {
+	Token    token.Token
+	Function Exp
+	Args     []Exp
+}
+
+func (ce *CallExp) expNode()             {}
+func (ce *CallExp) TokenLiteral() string { return ce.Token.Literal }
+func (ce *CallExp) String() string {
+	var out bytes.Buffer
+
+	args := []string{}
+	for _, a := range ce.Args {
+		args = append(args, a.String())
+	}
+
+	out.WriteString(ce.Function.String())
+	out.WriteString("(")
+	out.WriteString(strings.Join(args, ", "))
+	out.WriteString(")")
 
 	return out.String()
 }

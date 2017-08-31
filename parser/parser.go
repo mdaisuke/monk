@@ -29,6 +29,7 @@ var precedences = map[token.TokenType]int{
 	token.MINUS:    SUM,
 	token.SLASH:    PRODUCT,
 	token.ASTERISK: PRODUCT,
+	token.LPAREN:   CALL,
 }
 
 type (
@@ -61,6 +62,8 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerNud(token.TRUE, p.parseBoolean)
 	p.registerNud(token.FALSE, p.parseBoolean)
 	p.registerNud(token.LPAREN, p.parseGroupedExp)
+	p.registerNud(token.IF, p.parseIfExp)
+	p.registerNud(token.FUNCTION, p.parseFunctionLiteral)
 	p.leds = make(map[token.TokenType]led)
 	p.registerLed(token.PLUS, p.parseInfixExp)
 	p.registerLed(token.MINUS, p.parseInfixExp)
@@ -70,6 +73,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerLed(token.NOT_EQ, p.parseInfixExp)
 	p.registerLed(token.LT, p.parseInfixExp)
 	p.registerLed(token.GT, p.parseInfixExp)
+	p.registerLed(token.LPAREN, p.parseCallExp)
 
 	p.nextToken()
 	p.nextToken()
@@ -289,4 +293,129 @@ func (p *Parser) parseGroupedExp() ast.Exp {
 	}
 
 	return exp
+}
+
+func (p *Parser) parseIfExp() ast.Exp {
+	exp := &ast.IfExp{Token: p.curToken}
+
+	if !p.expectPeek(token.LPAREN) {
+		return nil
+	}
+
+	p.nextToken()
+	exp.Cond = p.parseExp(LOWEST)
+
+	if !p.expectPeek(token.RPAREN) {
+		return nil
+	}
+
+	if !p.expectPeek(token.LBRACE) {
+		return nil
+	}
+
+	exp.Conseq = p.parseBlockStmt()
+
+	if p.peekTokenIs(token.ELSE) {
+		p.nextToken()
+
+		if !p.expectPeek(token.LBRACE) {
+			return nil
+		}
+
+		exp.Alt = p.parseBlockStmt()
+	}
+
+	return exp
+}
+
+func (p *Parser) parseBlockStmt() *ast.BlockStmt {
+	block := &ast.BlockStmt{Token: p.curToken}
+	block.Stmts = []ast.Stmt{}
+
+	p.nextToken()
+
+	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
+		stmt := p.parseStmt()
+		if stmt != nil {
+			block.Stmts = append(block.Stmts, stmt)
+		}
+		p.nextToken()
+	}
+
+	return block
+}
+
+func (p *Parser) parseFunctionLiteral() ast.Exp {
+	lit := &ast.FunctionLiteral{Token: p.curToken}
+
+	if !p.expectPeek(token.LPAREN) {
+		return nil
+	}
+
+	lit.Params = p.parseFunctionParams()
+
+	if !p.expectPeek(token.LBRACE) {
+		return nil
+	}
+
+	lit.Body = p.parseBlockStmt()
+
+	return lit
+}
+
+func (p *Parser) parseFunctionParams() []*ast.Identifier {
+	idents := []*ast.Identifier{}
+
+	if p.peekTokenIs(token.RPAREN) {
+		p.nextToken()
+		return idents
+	}
+
+	p.nextToken()
+
+	ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+	idents = append(idents, ident)
+
+	for p.peekTokenIs(token.COMMA) {
+		p.nextToken()
+		p.nextToken()
+		ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+		idents = append(idents, ident)
+	}
+
+	if !p.expectPeek(token.RPAREN) {
+		return nil
+	}
+
+	return idents
+}
+
+func (p *Parser) parseCallExp(function ast.Exp) ast.Exp {
+	exp := &ast.CallExp{Token: p.curToken, Function: function}
+	exp.Args = p.parseCallArgs()
+	return exp
+}
+
+func (p *Parser) parseCallArgs() []ast.Exp {
+	args := []ast.Exp{}
+
+	if p.peekTokenIs(token.RPAREN) {
+		p.nextToken()
+		return args
+	}
+
+	p.nextToken()
+	args = append(args, p.parseExp(LOWEST))
+
+	for p.peekTokenIs(token.COMMA) {
+		p.nextToken()
+		p.nextToken()
+		args = append(args, p.parseExp(LOWEST))
+	}
+
+	if !p.expectPeek(token.RPAREN) {
+		return nil
+	}
+
+	return args
 }
