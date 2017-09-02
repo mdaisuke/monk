@@ -135,6 +135,10 @@ func (p *Parser) parseLetStmt() *ast.LetStmt {
 		return nil
 	}
 
+	p.nextToken()
+
+	stmt.Value = p.parseExp(LOWEST)
+
 	for !p.curTokenIs(token.SEMICOLON) {
 		p.nextToken()
 	}
@@ -164,6 +168,8 @@ func (p *Parser) parseReturnStmt() *ast.ReturnStmt {
 	stmt := &ast.ReturnStmt{Token: p.curToken}
 
 	p.nextToken()
+
+	stmt.ReturnValue = p.parseExp(LOWEST)
 
 	for !p.curTokenIs(token.SEMICOLON) {
 		p.nextToken()

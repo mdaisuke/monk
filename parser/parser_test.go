@@ -9,37 +9,34 @@ import (
 )
 
 func TestLetStmts(t *testing.T) {
-	input := `
-	let x = 5;
-	let y = 10;
-	let foobar = 838383;
-	`
-
-	l := lexer.New(input)
-	p := New(l)
-	program := p.ParseProgram()
-	checkParserErrors(t, p)
-
-	if program == nil {
-		t.Fatalf("ParseProgram returned nil")
-	}
-
-	if len(program.Stmts) != 3 {
-		t.Fatalf("len(program.Stmts) is not 3. got=%d",
-			len(program.Stmts))
-	}
-
 	tests := []struct {
+		input              string
 		expectedIdentifier string
+		expectedValue      interface{}
 	}{
-		{"x"},
-		{"y"},
-		{"foobar"},
+		{"let x = 5;", "x", 5},
+		{"let y = true;", "y", true},
+		{"let foobar = y;", "foobar", "y"},
 	}
 
-	for i, tt := range tests {
-		stmt := program.Stmts[i]
+	for _, tt := range tests {
+		l := lexer.New(tt.input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		if len(program.Stmts) != 1 {
+			t.Fatalf("len(program.Stmts) is not 1. got=%d",
+				len(program.Stmts))
+		}
+
+		stmt := program.Stmts[0]
 		if !testLetStmt(t, stmt, tt.expectedIdentifier) {
+			return
+		}
+
+		val := stmt.(*ast.LetStmt).Value
+		if !testLiteralExp(t, val, tt.expectedValue) {
 			return
 		}
 	}
