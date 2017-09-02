@@ -760,3 +760,23 @@ func TestCallExpParsing(t *testing.T) {
 	testInfixExp(t, exp.Args[2], 4, "+", 5)
 
 }
+
+func TestStringLiteralExp(t *testing.T) {
+	input := `"hello world";`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Stmts[0].(*ast.ExpStmt)
+	literal, ok := stmt.Exp.(*ast.StringLiteral)
+	if !ok {
+		t.Fatalf("exp is not ast.StringLiteral. got=%T", stmt.Exp)
+	}
+
+	if literal.Value != "hello world" {
+		t.Errorf("literal.Value is not 'hello world'. got=%q",
+			literal.Value)
+	}
+}

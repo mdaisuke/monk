@@ -64,6 +64,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerNud(token.LPAREN, p.parseGroupedExp)
 	p.registerNud(token.IF, p.parseIfExp)
 	p.registerNud(token.FUNCTION, p.parseFunctionLiteral)
+	p.registerNud(token.STRING, p.parseStringLiteral)
 	p.leds = make(map[token.TokenType]led)
 	p.registerLed(token.PLUS, p.parseInfixExp)
 	p.registerLed(token.MINUS, p.parseInfixExp)
@@ -424,4 +425,8 @@ func (p *Parser) parseCallArgs() []ast.Exp {
 	}
 
 	return args
+}
+
+func (p *Parser) parseStringLiteral() ast.Exp {
+	return &ast.StringLiteral{Token: p.curToken, Value: p.curToken.Literal}
 }
