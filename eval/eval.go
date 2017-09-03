@@ -151,6 +151,8 @@ func evalInfixExp(
 	case left.Type() != right.Type():
 		return newError("type mismatch: %s %s %s",
 			left.Type(), op, right.Type())
+	case left.Type() == obj.STRING_OBJ && right.Type() == obj.STRING_OBJ:
+		return evalStringInfixExp(op, left, right)
 	default:
 		return newError("unknown op: %s %s %s",
 			left.Type(), op, right.Type())
@@ -264,12 +266,15 @@ func evalIdentifier(
 	node *ast.Identifier,
 	env *obj.Env,
 ) obj.Obj {
-	val, ok := env.Get(node.Value)
-	if !ok {
-		return newError("identifier not found: " + node.Value)
+	if val, ok := env.Get(node.Value); ok {
+		return val
 	}
 
-	return val
+	if builtin, ok := builtins[node.Value]; ok {
+		return builtin
+	}
+
+	return newError("identifier not found: " + node.Value)
 }
 
 func evalExps(
@@ -290,14 +295,17 @@ func evalExps(
 }
 
 func applyFunction(fn obj.Obj, args []obj.Obj) obj.Obj {
-	function, ok := fn.(*obj.Function)
-	if !ok {
+	switch fn := fn.(type) {
+	case *obj.Function:
+		extendedEnv := extendFunctionEnv(fn, args)
+		evaluated := Eval(fn.Body, extendedEnv)
+		return unwrapReturnValue(evaluated)
+	case *obj.Builtin:
+		return fn.Fn(args...)
+
+	default:
 		return newError("not a function: %s", fn.Type())
 	}
-
-	extendedEnv := extendFunctionEnv(function, args)
-	evaluated := Eval(function.Body, extendedEnv)
-	return unwrapReturnValue(evaluated)
 }
 
 func extendFunctionEnv(
@@ -319,4 +327,18 @@ func unwrapReturnValue(o obj.Obj) obj.Obj {
 	}
 
 	return o
+}
+
+func evalStringInfixExp(
+	op string,
+	left, right obj.Obj,
+) obj.Obj {
+	if op != "+" {
+		return newError("unknown op: %s %s %s",
+			left.Type(), op, right.Type())
+	}
+
+	leftVal := left.(*obj.String).Value
+	rightVal := right.(*obj.String).Value
+	return &obj.String{Value: leftVal + rightVal}
 }
