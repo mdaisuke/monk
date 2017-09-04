@@ -398,6 +398,14 @@ func TestOpPrecedenceParsing(t *testing.T) {
 			"add(a + b + c * d / f + g)",
 			"add((((a + b) + ((c * d) / f)) + g))",
 		},
+		{
+			"a * [1, 2, 3, 4][b * c] * d",
+			"((a * ([1, 2, 3, 4][(b * c)])) * d)",
+		},
+		{
+			"add(a * b[2], b[1], 2 * [1, 2][1])",
+			"add((a * (b[2])), (b[1]), (2 * ([1, 2][1])))",
+		},
 	}
 
 	for _, tt := range tests {
@@ -779,4 +787,54 @@ func TestStringLiteralExp(t *testing.T) {
 		t.Errorf("literal.Value is not 'hello world'. got=%q",
 			literal.Value)
 	}
+}
+
+func TestParsingArrayLiterals(t *testing.T) {
+	input := "[1, 2 * 2, 3 + 3]"
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt, ok := program.Stmts[0].(*ast.ExpStmt)
+	array, ok := stmt.Exp.(*ast.ArrayLiteral)
+	if !ok {
+		t.Fatalf("exp is not ast.ArrayLiteral. got=%T",
+			stmt.Exp)
+	}
+
+	if len(array.Elems) != 3 {
+		t.Fatalf("len(array.Elems) is not 3. got=%d",
+			len(array.Elems))
+	}
+
+	testIntegerLiteral(t, array.Elems[0], 1)
+	testInfixExp(t, array.Elems[1], 2, "*", 2)
+	testInfixExp(t, array.Elems[2], 3, "+", 3)
+}
+
+func TestParsingIndexExps(t *testing.T) {
+	input := "myArray[1 + 1]"
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt, ok := program.Stmts[0].(*ast.ExpStmt)
+	indexExp, ok := stmt.Exp.(*ast.IndexExp)
+	if !ok {
+		t.Fatalf("stmt.Exp is not ast.IndexExp. got=%T",
+			stmt.Exp)
+	}
+
+	if !testIdentifier(t, indexExp.Left, "myArray") {
+		return
+	}
+
+	if !testInfixExp(t, indexExp.Index, 1, "+", 1) {
+		return
+	}
+
 }

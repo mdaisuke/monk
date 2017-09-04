@@ -18,6 +18,7 @@ const (
 	PRODUCT
 	PREFIX
 	CALL
+	INDEX
 )
 
 var precedences = map[token.TokenType]int{
@@ -30,6 +31,7 @@ var precedences = map[token.TokenType]int{
 	token.SLASH:    PRODUCT,
 	token.ASTERISK: PRODUCT,
 	token.LPAREN:   CALL,
+	token.LBRACKET: INDEX,
 }
 
 type (
@@ -65,6 +67,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerNud(token.IF, p.parseIfExp)
 	p.registerNud(token.FUNCTION, p.parseFunctionLiteral)
 	p.registerNud(token.STRING, p.parseStringLiteral)
+	p.registerNud(token.LBRACKET, p.parseArrayLiteral)
 	p.leds = make(map[token.TokenType]led)
 	p.registerLed(token.PLUS, p.parseInfixExp)
 	p.registerLed(token.MINUS, p.parseInfixExp)
@@ -75,6 +78,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerLed(token.LT, p.parseInfixExp)
 	p.registerLed(token.GT, p.parseInfixExp)
 	p.registerLed(token.LPAREN, p.parseCallExp)
+	p.registerLed(token.LBRACKET, p.parseIndexExp)
 
 	p.nextToken()
 	p.nextToken()
@@ -399,7 +403,7 @@ func (p *Parser) parseFunctionParams() []*ast.Identifier {
 
 func (p *Parser) parseCallExp(function ast.Exp) ast.Exp {
 	exp := &ast.CallExp{Token: p.curToken, Function: function}
-	exp.Args = p.parseCallArgs()
+	exp.Args = p.parseExpList(token.RPAREN)
 	return exp
 }
 
@@ -429,4 +433,49 @@ func (p *Parser) parseCallArgs() []ast.Exp {
 
 func (p *Parser) parseStringLiteral() ast.Exp {
 	return &ast.StringLiteral{Token: p.curToken, Value: p.curToken.Literal}
+}
+
+func (p *Parser) parseArrayLiteral() ast.Exp {
+	array := &ast.ArrayLiteral{Token: p.curToken}
+
+	array.Elems = p.parseExpList(token.RBRACKET)
+
+	return array
+}
+
+func (p *Parser) parseExpList(end token.TokenType) []ast.Exp {
+	list := []ast.Exp{}
+
+	if p.peekTokenIs(end) {
+		p.nextToken()
+		return list
+	}
+
+	p.nextToken()
+	list = append(list, p.parseExp(LOWEST))
+
+	for p.peekTokenIs(token.COMMA) {
+		p.nextToken()
+		p.nextToken()
+		list = append(list, p.parseExp(LOWEST))
+	}
+
+	if !p.expectPeek(end) {
+		return nil
+	}
+
+	return list
+}
+
+func (p *Parser) parseIndexExp(left ast.Exp) ast.Exp {
+	exp := &ast.IndexExp{Token: p.curToken, Left: left}
+
+	p.nextToken()
+	exp.Index = p.parseExp(LOWEST)
+
+	if !p.expectPeek(token.RBRACKET) {
+		return nil
+	}
+
+	return exp
 }
